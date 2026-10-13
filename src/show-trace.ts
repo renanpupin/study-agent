@@ -1,5 +1,5 @@
-// Uso: npm run trace            (último trace)
-//      npm run trace -- <traceId>
+// Usage: npm run trace            (latest trace)
+//        npm run trace -- <traceId>
 
 import { loadTrace, printTrace } from "./trace-printer";
 

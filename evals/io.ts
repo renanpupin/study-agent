@@ -16,7 +16,7 @@ export function saveResult(name: string, data: unknown): string {
   return path;
 }
 
-/** Os N arquivos de resultado mais recentes (os nomes começam com timestamp). */
+/** The N most recent result files (file names start with a timestamp). */
 export function latestResults(n: number): string[] {
   return readdirSync(RESULTS_DIR)
     .filter((f) => f.endsWith(".json"))

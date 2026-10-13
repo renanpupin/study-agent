@@ -8,11 +8,11 @@ export function loadTrace(traceId?: string): Span[] {
 
 function latestTraceFile(): string {
   const files = readdirSync(TRACES_DIR).filter((f) => f.endsWith(".json"));
-  if (files.length === 0) throw new Error("Nenhum trace encontrado. Rode `npm run agent` primeiro.");
+  if (files.length === 0) throw new Error("No traces found. Run `npm run agent` first.");
   return files.sort((a, b) => statSync(`${TRACES_DIR}/${b}`).mtimeMs - statSync(`${TRACES_DIR}/${a}`).mtimeMs)[0]!;
 }
 
-/** Imprime os spans como árvore, no estilo da "waterfall" de uma ferramenta de observabilidade. */
+/** Prints the spans as a tree, like the "waterfall" view of an observability tool. */
 export function printTrace(spans: Span[]): void {
   const root = spans.find((s) => s.parentId === null);
   if (!root) return;
@@ -34,7 +34,7 @@ function describe(span: Span): string {
     case "llm":
       return `${a.model} in=${a.input_tokens} out=${a.output_tokens} $${Number(a.cost_usd).toFixed(4)} stop=${a.stop_reason}  ${truncate(String(a.output ?? ""))}`;
     case "tool":
-      return `${JSON.stringify(a.input)} → ${a.is_error ? "ERRO " : ""}${truncate(String(a.output ?? ""))}`;
+      return `${JSON.stringify(a.input)} → ${a.is_error ? "ERROR " : ""}${truncate(String(a.output ?? ""))}`;
     case "agent":
       return `steps=${a.steps} $${Number(a.cost_usd ?? 0).toFixed(4)} "${truncate(String(a.question ?? ""))}"`;
     case "eval":

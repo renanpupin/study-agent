@@ -1,11 +1,11 @@
-// Calibração do judge: ele concorda com um humano?
+// Judge calibration: does it agree with a human?
 //
-// Um judge só serve como métrica se concordar com o julgamento humano.
-// Aqui rodamos o judge em exemplos que já rotulamos à mão (calibration.jsonl)
-// e medimos a concordância. Se ela for baixa, ajuste o prompt ou o critério
-// do judge antes de confiar nos números do eval.
+// A judge is only useful as a metric if it agrees with human judgment.
+// Here we run the judge on examples we already labeled by hand
+// (calibration.jsonl) and measure the agreement. If it is low, adjust the
+// judge's prompt or criterion before trusting the eval numbers.
 //
-// Uso: npm run judge:calibrate
+// Usage: npm run judge:calibrate
 
 import type { ToolCall } from "../src/agent";
 import { GROUNDEDNESS_CRITERION, judge } from "./judge";
@@ -16,13 +16,13 @@ interface CalibrationItem {
   question: string;
   tool_calls: ToolCall[];
   answer: string;
-  /** Texto do critério, ou "grounded" para usar o critério fixo de alucinação. */
+  /** Criterion text, or "grounded" to use the fixed hallucination criterion. */
   criterion: string;
   human_pass: boolean;
 }
 
 const items = readJsonl<CalibrationItem>("evals/calibration.jsonl");
-console.log(`Calibrando o judge em ${items.length} exemplos rotulados por humano...\n`);
+console.log(`Calibrating the judge on ${items.length} human-labeled examples...\n`);
 
 const rows = await Promise.all(
   items.map(async (item) => {
@@ -46,23 +46,23 @@ for (const { item, verdict } of rows) {
 
 console.table(
   rows.map(({ item, verdict }) => ({
-    exemplo: item.id,
-    humano: mark(item.human_pass),
+    example: item.id,
+    human: mark(item.human_pass),
     judge: mark(verdict.pass),
-    concorda: item.human_pass === verdict.pass ? "sim" : "NÃO",
+    agrees: item.human_pass === verdict.pass ? "yes" : "NO",
   })),
 );
 
 const n = rows.length;
 const agreement = (tp + tn) / n;
-// Cohen's kappa: concordância descontando a que aconteceria por acaso.
+// Cohen's kappa: agreement discounting what would happen by chance.
 const chance = ((tp + fp) / n) * ((tp + fn) / n) + ((tn + fn) / n) * ((tn + fp) / n);
 const kappa = chance === 1 ? 1 : (agreement - chance) / (1 - chance);
 
-console.log(`\nConcordância: ${pct(agreement)}   Cohen's kappa: ${kappa.toFixed(2)}`);
-console.log(`Falso positivo (judge aprovou, humano reprovou): ${fp}   Falso negativo: ${fn}`);
-console.log("Referência: kappa > 0.8 é ótimo; < 0.6 indica que o judge precisa de ajuste.");
+console.log(`\nAgreement: ${pct(agreement)}   Cohen's kappa: ${kappa.toFixed(2)}`);
+console.log(`False positives (judge passed, human failed): ${fp}   False negatives: ${fn}`);
+console.log("Reference: kappa > 0.8 is great; < 0.6 means the judge needs adjusting.");
 
 for (const { item, verdict } of rows.filter(({ item, verdict }) => item.human_pass !== verdict.pass)) {
-  console.log(`\n[${item.id}] humano=${mark(item.human_pass)} judge=${mark(verdict.pass)}\n  ${verdict.reasoning}`);
+  console.log(`\n[${item.id}] human=${mark(item.human_pass)} judge=${mark(verdict.pass)}\n  ${verdict.reasoning}`);
 }

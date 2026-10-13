@@ -1,23 +1,23 @@
-// Configuração central. Tudo pode ser sobrescrito por variável de ambiente
-// para rodar "experimentos" (ex.: PROMPT_VERSION=v2 npm run eval).
+// Central configuration. Everything can be overridden through environment
+// variables to run "experiments" (e.g. PROMPT_VERSION=v2 npm run eval).
 
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export const AGENT_MODEL = process.env.AGENT_MODEL ?? "claude-opus-5-5";
 export const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-opus-5-5";
 
-// Effort controla o quanto o modelo "pensa" (e quantos tokens gasta).
-// Tarefas simples como as deste projeto vão bem com "low".
+// Effort controls how much the model "thinks" (and how many tokens it spends).
+// Simple tasks like the ones in this project work well with "low".
 export const AGENT_EFFORT = (process.env.AGENT_EFFORT ?? "low") as Effort;
 export const JUDGE_EFFORT = (process.env.JUDGE_EFFORT ?? "medium") as Effort;
 
-// Qual system prompt do agente usar (ver src/prompts.ts).
+// Which agent system prompt to use (see src/prompts.ts).
 export const PROMPT_VERSION = process.env.PROMPT_VERSION ?? "v1";
 
-// Guarda de segurança: o loop do agente nunca passa disso.
+// Safety guard: the agent loop never goes past this.
 export const MAX_STEPS = 8;
 
-// Preço em USD por 1M de tokens. Usado para calcular custo por chamada.
+// Price in USD per 1M tokens. Used to compute the cost of each call.
 const PRICING: Record<string, { input: number; output: number }> = {
   "claude-opus-5-5": { input: 4, output: 20 },
   "claude-sonnet-5-5": { input: 2, output: 10 },

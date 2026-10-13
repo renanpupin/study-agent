@@ -1,16 +1,16 @@
-// LLM-as-a-judge: um modelo avalia a resposta de outro segundo um critério.
+// LLM-as-a-judge: one model evaluates another model's answer against a criterion.
 //
-// Boas práticas aplicadas aqui:
-//  - veredito BINÁRIO (pass/fail), bem mais consistente que nota de 1 a 10
-//  - um critério por chamada, escrito de forma objetiva
-//  - justificativa curta junto do veredito, para um humano auditar depois.
-//    O modelo já "pensa" internamente (adaptive thinking); NÃO peça para ele
-//    escrever o raciocínio passo a passo na saída: isso é tratado como tentativa
-//    de extrair o raciocínio interno e a API recusa (stop_reason "refusal",
-//    categoria "reasoning_extraction").
-//  - saída estruturada (JSON validado por Zod), nada de regex em texto livre
-//  - o judge vê as chamadas de tools, então consegue detectar alucinação
-//  - calibrar contra rótulos humanos (ver evals/calibrate.ts)
+// Best practices applied here:
+//  - BINARY verdict (pass/fail), much more consistent than a 1-10 score
+//  - one criterion per call, written objectively
+//  - a short justification next to the verdict, so a human can audit it later.
+//    The model already "thinks" internally (adaptive thinking); do NOT ask it
+//    to write its step-by-step reasoning in the output: that is treated as an
+//    attempt to extract the internal reasoning and the API refuses it
+//    (stop_reason "refusal", category "reasoning_extraction").
+//  - structured output (JSON validated by Zod), no regex over free text
+//  - the judge sees the tool calls, so it can detect hallucinations
+//  - calibrate against human labels (see evals/calibrate.ts)
 
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
@@ -20,7 +20,7 @@ import { messageCost, parseMessage } from "../src/llm";
 import { setAttributes, withSpan } from "../src/tracing";
 
 const Verdict = z.object({
-  reasoning: z.string().describe("Justificativa do veredito em uma ou duas frases"),
+  reasoning: z.string().describe("Justification for the verdict in one or two sentences"),
   pass: z.boolean(),
 });
 
@@ -37,12 +37,12 @@ export interface JudgeResult {
   costUsd: number;
 }
 
-// Critério fixo, usado em todos os casos: a resposta inventou algo?
-export const GROUNDEDNESS_CRITERION = `Todo dado concreto da resposta (temperaturas, condições do tempo, valores, taxas, resultados de contas) aparece nos resultados das ferramentas ou é derivado corretamente deles. Conhecimento geral amplamente conhecido (ex.: capitais de países) é aceitável. Reprova se houver qualquer número ou fato inventado, estimado ou que contradiga os resultados das ferramentas.`;
+// Fixed criterion, used in every case: did the answer make something up?
+export const GROUNDEDNESS_CRITERION = `Every concrete piece of data in the answer (temperatures, weather conditions, amounts, rates, calculation results) appears in the tool results or is correctly derived from them. Widely known general knowledge (e.g. country capitals) is acceptable. Fail if there is any number or fact that is made up, estimated, or contradicts the tool results.`;
 
-const SYSTEM = `Você é um avaliador rigoroso de respostas de um agente de IA.
-Avalie SOMENTE o critério pedido, ignorando estilo e tamanho da resposta, a menos que o critério fale disso.
-Na dúvida, reprove. Em reasoning, justifique o veredito em uma ou duas frases.`;
+const SYSTEM = `You are a strict evaluator of an AI agent's answers.
+Evaluate ONLY the requested criterion, ignoring the style and length of the answer unless the criterion mentions them.
+When in doubt, fail it. In reasoning, justify the verdict in one or two sentences.`;
 
 export async function judge(name: string, input: JudgeInput): Promise<JudgeResult> {
   return withSpan(`judge.${name}`, "eval", async (span) => {
@@ -58,8 +58,8 @@ export async function judge(name: string, input: JudgeInput): Promise<JudgeResul
     );
     const verdict = response.parsed_output;
     if (!verdict) {
-      const category = response.stop_details?.category ? `, categoria=${response.stop_details.category}` : "";
-      throw new Error(`Judge não retornou um veredito válido (stop_reason=${response.stop_reason}${category})`);
+      const category = response.stop_details?.category ? `, category=${response.stop_details.category}` : "";
+      throw new Error(`Judge did not return a valid verdict (stop_reason=${response.stop_reason}${category})`);
     }
     setAttributes(span, { criterion: input.criterion, pass: verdict.pass, reasoning: verdict.reasoning });
     return { ...verdict, costUsd: messageCost(response) };
@@ -69,24 +69,24 @@ export async function judge(name: string, input: JudgeInput): Promise<JudgeResul
 function buildPrompt({ question, toolCalls, answer, criterion }: JudgeInput): string {
   const calls = toolCalls.length
     ? toolCalls
-        .map((c) => `- ${c.name}(${JSON.stringify(c.input)}) → ${c.isError ? "ERRO: " : ""}${c.output}`)
+        .map((c) => `- ${c.name}(${JSON.stringify(c.input)}) → ${c.isError ? "ERROR: " : ""}${c.output}`)
         .join("\n")
-    : "(nenhuma ferramenta foi chamada)";
-  return `<pergunta_do_usuario>
+    : "(no tools were called)";
+  return `<user_question>
 ${question}
-</pergunta_do_usuario>
+</user_question>
 
-<chamadas_de_ferramentas>
+<tool_calls>
 ${calls}
-</chamadas_de_ferramentas>
+</tool_calls>
 
-<resposta_do_agente>
+<agent_answer>
 ${answer}
-</resposta_do_agente>
+</agent_answer>
 
-<criterio>
+<criterion>
 ${criterion}
-</criterio>
+</criterion>
 
-A resposta do agente atende ao critério?`;
+Does the agent's answer meet the criterion?`;
 }

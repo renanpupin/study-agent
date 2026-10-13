@@ -1,7 +1,7 @@
-// As ferramentas do agente. Cada uma tem:
-//  - definition: o que o modelo vê (nome, descrição, JSON Schema)
-//  - schema: validação Zod do input, antes de executar
-//  - run: a implementação de verdade (aqui, dados fake para estudo)
+// The agent's tools. Each one has:
+//  - definition: what the model sees (name, description, JSON Schema)
+//  - schema: Zod validation of the input, before running
+//  - run: the real implementation (fake data here, for study purposes)
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
@@ -17,25 +17,25 @@ function defineTool<S extends z.ZodType>(spec: ToolSpec<S>): ToolSpec<S> {
 }
 
 const FAKE_WEATHER: Record<string, { tempC: number; condition: string }> = {
-  "são paulo": { tempC: 24, condition: "nublado" },
-  "rio de janeiro": { tempC: 31, condition: "ensolarado" },
-  curitiba: { tempC: 15, condition: "chuvoso" },
-  lisboa: { tempC: 19, condition: "parcialmente nublado" },
+  "são paulo": { tempC: 24, condition: "cloudy" },
+  "rio de janeiro": { tempC: 31, condition: "sunny" },
+  curitiba: { tempC: 15, condition: "rainy" },
+  lisbon: { tempC: 19, condition: "partly cloudy" },
 };
 
-// Quantos reais vale 1 unidade de cada moeda.
+// How many reais 1 unit of each currency is worth.
 const FAKE_RATES_TO_BRL: Record<string, number> = { BRL: 1, USD: 5.5, EUR: 6.0 };
 
 const calculator = defineTool({
   definition: {
     name: "calculator",
     description:
-      "Avalia uma expressão aritmética e retorna o resultado. Suporta + - * / ( ) e decimais com ponto. Use para qualquer conta.",
+      "Evaluates an arithmetic expression and returns the result. Supports + - * / ( ) and decimals with a dot. Use it for any calculation.",
     strict: true,
     input_schema: {
       type: "object",
       properties: {
-        expression: { type: "string", description: "Ex.: (200 * 6) * 0.9" },
+        expression: { type: "string", description: "E.g. (200 * 6) * 0.9" },
       },
       required: ["expression"],
       additionalProperties: false,
@@ -43,12 +43,12 @@ const calculator = defineTool({
   },
   schema: z.object({ expression: z.string() }),
   run: ({ expression }) => {
-    // Só aceitamos dígitos e operadores. Nunca avalie input do modelo sem filtrar.
+    // Only digits and operators are allowed. Never evaluate model input without filtering it.
     if (!/^[\d+\-*/().\s]+$/.test(expression)) {
-      throw new Error(`Expressão inválida: ${expression}`);
+      throw new Error(`Invalid expression: ${expression}`);
     }
     const result = Function(`"use strict"; return (${expression});`)() as number;
-    if (!Number.isFinite(result)) throw new Error("Resultado não é um número finito");
+    if (!Number.isFinite(result)) throw new Error("Result is not a finite number");
     return String(Math.round(result * 1e6) / 1e6);
   },
 });
@@ -56,11 +56,11 @@ const calculator = defineTool({
 const getWeather = defineTool({
   definition: {
     name: "get_weather",
-    description: "Retorna a temperatura atual (Celsius) e a condição do tempo de uma cidade.",
+    description: "Returns the current temperature (Celsius) and weather condition for a city.",
     strict: true,
     input_schema: {
       type: "object",
-      properties: { city: { type: "string", description: "Nome da cidade, ex.: São Paulo" } },
+      properties: { city: { type: "string", description: "City name, e.g. São Paulo" } },
       required: ["city"],
       additionalProperties: false,
     },
@@ -68,7 +68,7 @@ const getWeather = defineTool({
   schema: z.object({ city: z.string() }),
   run: ({ city }) => {
     const weather = FAKE_WEATHER[city.trim().toLowerCase()];
-    if (!weather) throw new Error(`Cidade não encontrada: ${city}`);
+    if (!weather) throw new Error(`City not found: ${city}`);
     return JSON.stringify({ city, temperature_c: weather.tempC, condition: weather.condition });
   },
 });
@@ -76,7 +76,7 @@ const getWeather = defineTool({
 const convertCurrency = defineTool({
   definition: {
     name: "convert_currency",
-    description: "Converte um valor entre moedas. Moedas suportadas: BRL, USD, EUR.",
+    description: "Converts an amount between currencies. Supported currencies: BRL, USD, EUR.",
     strict: true,
     input_schema: {
       type: "object",
@@ -104,11 +104,11 @@ const TOOLS = [calculator, getWeather, convertCurrency];
 
 export const toolDefinitions: Anthropic.Beta.BetaTool[] = TOOLS.map((t) => t.definition);
 
-/** Executa uma tool pelo nome. Lança erro se a tool não existir, o input for inválido ou a execução falhar. */
+/** Runs a tool by name. Throws if the tool does not exist, the input is invalid or the execution fails. */
 export function executeTool(name: string, input: unknown): string {
   const tool = TOOLS.find((t) => t.definition.name === name);
-  if (!tool) throw new Error(`Tool desconhecida: ${name}`);
+  if (!tool) throw new Error(`Unknown tool: ${name}`);
   const parsed = tool.schema.safeParse(input);
-  if (!parsed.success) throw new Error(`Input inválido para ${name}: ${parsed.error.message}`);
+  if (!parsed.success) throw new Error(`Invalid input for ${name}: ${parsed.error.message}`);
   return (tool.run as (input: unknown) => string)(parsed.data);
 }
