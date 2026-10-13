@@ -3,7 +3,11 @@
 // Boas práticas aplicadas aqui:
 //  - veredito BINÁRIO (pass/fail), bem mais consistente que nota de 1 a 10
 //  - um critério por chamada, escrito de forma objetiva
-//  - raciocínio ANTES do veredito (o campo reasoning vem primeiro no schema)
+//  - justificativa curta junto do veredito, para um humano auditar depois.
+//    O modelo já "pensa" internamente (adaptive thinking); NÃO peça para ele
+//    escrever o raciocínio passo a passo na saída: isso é tratado como tentativa
+//    de extrair o raciocínio interno e a API recusa (stop_reason "refusal",
+//    categoria "reasoning_extraction").
 //  - saída estruturada (JSON validado por Zod), nada de regex em texto livre
 //  - o judge vê as chamadas de tools, então consegue detectar alucinação
 //  - calibrar contra rótulos humanos (ver evals/calibrate.ts)
@@ -16,7 +20,7 @@ import { messageCost, parseMessage } from "../src/llm";
 import { setAttributes, withSpan } from "../src/tracing";
 
 const Verdict = z.object({
-  reasoning: z.string().describe("Análise curta, passo a passo, antes do veredito"),
+  reasoning: z.string().describe("Justificativa do veredito em uma ou duas frases"),
   pass: z.boolean(),
 });
 
@@ -38,7 +42,7 @@ export const GROUNDEDNESS_CRITERION = `Todo dado concreto da resposta (temperatu
 
 const SYSTEM = `Você é um avaliador rigoroso de respostas de um agente de IA.
 Avalie SOMENTE o critério pedido, ignorando estilo e tamanho da resposta, a menos que o critério fale disso.
-Na dúvida, reprove. Pense passo a passo no campo reasoning e só então decida pass.`;
+Na dúvida, reprove. Em reasoning, justifique o veredito em uma ou duas frases.`;
 
 export async function judge(name: string, input: JudgeInput): Promise<JudgeResult> {
   return withSpan(`judge.${name}`, "eval", async (span) => {
@@ -53,7 +57,10 @@ export async function judge(name: string, input: JudgeInput): Promise<JudgeResul
       "llm.judge",
     );
     const verdict = response.parsed_output;
-    if (!verdict) throw new Error(`Judge não retornou um veredito válido (stop_reason=${response.stop_reason})`);
+    if (!verdict) {
+      const category = response.stop_details?.category ? `, categoria=${response.stop_details.category}` : "";
+      throw new Error(`Judge não retornou um veredito válido (stop_reason=${response.stop_reason}${category})`);
+    }
     setAttributes(span, { criterion: input.criterion, pass: verdict.pass, reasoning: verdict.reasoning });
     return { ...verdict, costUsd: messageCost(response) };
   });

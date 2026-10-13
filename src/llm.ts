@@ -44,6 +44,8 @@ async function traced<M extends Anthropic.Beta.BetaMessage>(
     setAttributes(span, {
       model: message.model,
       stop_reason: message.stop_reason,
+      // Só vem preenchido em recusas: categoria e explicação do motivo.
+      ...(message.stop_details && { stop_details: message.stop_details }),
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
       cost_usd: messageCost(message),

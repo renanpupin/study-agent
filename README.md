@@ -65,7 +65,7 @@ Para o que código não consegue checar, outro modelo avalia, com dois critério
 - **correct**: atende à rubrica do caso (`rubric` no dataset)?
 - **grounded**: todo número da resposta veio das tools? (detecta alucinação)
 
-Boas práticas aplicadas: veredito binário, um critério por chamada, raciocínio antes do veredito, saída estruturada com Zod, e o judge vê as chamadas de tools.
+Boas práticas aplicadas: veredito binário, um critério por chamada, justificativa curta (sem pedir o raciocínio passo a passo, que a API recusa como `reasoning_extraction`), saída estruturada com Zod, e o judge vê as chamadas de tools.
 
 ### 5. Rodar o eval: `evals/run.ts`
 

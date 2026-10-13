@@ -8,7 +8,7 @@ import { runAgent } from "../src/agent";
 import { AGENT_EFFORT, AGENT_MODEL, JUDGE_MODEL, PROMPT_VERSION } from "../src/config";
 import { withSpan, setAttributes } from "../src/tracing";
 import { runChecks, type CheckResult, type EvalCase } from "./checks";
-import { GROUNDEDNESS_CRITERION, judge } from "./judge";
+import { GROUNDEDNESS_CRITERION, judge, type JudgeInput, type JudgeResult } from "./judge";
 import { mark, pct, readJsonl, saveResult } from "./io";
 
 export interface CaseResult {
@@ -47,8 +47,8 @@ async function evaluateCase(testCase: EvalCase): Promise<CaseResult> {
 
     const judgeInput = { question: testCase.input, toolCalls: agent.toolCalls, answer: agent.answer };
     const [correct, grounded] = await Promise.all([
-      judge("correct", { ...judgeInput, criterion: testCase.rubric }),
-      judge("grounded", { ...judgeInput, criterion: GROUNDEDNESS_CRITERION }),
+      safeJudge("correct", { ...judgeInput, criterion: testCase.rubric }),
+      safeJudge("grounded", { ...judgeInput, criterion: GROUNDEDNESS_CRITERION }),
     ]);
     checks.push(
       { name: "judge_correct", pass: correct.pass, detail: correct.reasoning },
@@ -70,6 +70,16 @@ async function evaluateCase(testCase: EvalCase): Promise<CaseResult> {
       judgeCostUsd: correct.costUsd + grounded.costUsd,
     };
   });
+}
+
+// Um erro do judge (recusa, falha de rede...) não derruba o eval inteiro:
+// o check conta como falha e o motivo aparece no detalhe.
+async function safeJudge(name: string, input: JudgeInput): Promise<JudgeResult> {
+  try {
+    return await judge(name, input);
+  } catch (err) {
+    return { pass: false, reasoning: `[erro do judge] ${err instanceof Error ? err.message : err}`, costUsd: 0 };
+  }
 }
 
 // ---- Tabela por caso ----
