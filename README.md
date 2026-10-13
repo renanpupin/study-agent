@@ -1,41 +1,41 @@
 # study-agent
 
-Hello world de um agente de IA em TypeScript com **observabilidade**, **avaliação determinística**, **métricas** e **LLM-as-a-judge**. Tudo escrito à mão, sem frameworks, para ver cada conceito funcionando.
+A hello-world AI agent in TypeScript with **observability**, **deterministic evaluation**, **metrics** and **LLM-as-a-judge**. Everything is written by hand, with no frameworks, so you can see each concept working.
 
-O agente responde perguntas sobre clima, câmbio e contas usando 3 tools com dados fake.
+The agent answers questions about weather, currency exchange and math using 3 tools backed by fake data.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # e coloque sua ANTHROPIC_API_KEY
+cp .env.example .env   # then add your ANTHROPIC_API_KEY
 ```
 
-## Roteiro de estudo
+## Study path
 
-### 1. O agente: `src/agent.ts`
+### 1. The agent: `src/agent.ts`
 
 ```bash
-npm run agent -- "Converta 200 euros para reais e me diga quanto fica com 10% de desconto"
+npm run agent -- "Convert 200 euros to Brazilian reais and tell me how much it is with a 10% discount"
 ```
 
-Leia `runAgent`. Um agente é só um loop:
+Read `runAgent`. An agent is just a loop:
 
 ```
-pergunta → LLM ──(stop_reason = tool_use)──→ executa tools → devolve resultados → LLM → ...
-               └─(stop_reason = end_turn)──→ resposta final
+question → LLM ──(stop_reason = tool_use)──→ run tools → send results back → LLM → ...
+               └─(stop_reason = end_turn)──→ final answer
 ```
 
-- `src/tools.ts`: o que o modelo vê (`definition`: nome, descrição, JSON Schema) e o que roda de verdade (`run`). O input é validado com Zod antes de executar.
-- Um erro de tool **não derruba o agente**: ele volta como `tool_result` com `is_error: true` e o modelo decide o que fazer. Teste com `"Como está o tempo em Tóquio?"`.
-- `MAX_STEPS` evita loop infinito (e conta infinita).
+- `src/tools.ts`: what the model sees (`definition`: name, description, JSON Schema) and what actually runs (`run`). The input is validated with Zod before running.
+- A tool error **does not bring the agent down**: it comes back as a `tool_result` with `is_error: true`, and the model decides what to do. Try `"What's the weather like in Tokyo?"`.
+- `MAX_STEPS` prevents an infinite loop (and an infinite bill).
 
-### 2. Observabilidade: `src/tracing.ts`
+### 2. Observability: `src/tracing.ts`
 
-Cada execução gera um **trace** em `traces/<id>.json`: uma árvore de **spans** (agente → chamadas ao LLM → tools), cada um com duração, tokens, custo e input/output.
+Each run produces a **trace** in `traces/<id>.json`: a tree of **spans** (agent → LLM calls → tools), each with duration, tokens, cost and input/output.
 
 ```bash
-npm run trace          # imprime o último trace como árvore
+npm run trace          # prints the latest trace as a tree
 ```
 
 ```
@@ -45,38 +45,38 @@ npm run trace          # imprime o último trace como árvore
 │  ├─ [llm] llm.step_2  ...
 ```
 
-Repare em `src/llm.ts`: **toda** chamada ao modelo passa por ali, e é isso que garante que nada fica invisível. Esse é o mesmo modelo de dados do OpenTelemetry; em produção você troca este tracer por OTel e envia para Langfuse, Phoenix, Braintrust ou Datadog LLM Observability.
+Look at `src/llm.ts`: **every** model call goes through it, and that is what guarantees nothing stays invisible. This is the same data model as OpenTelemetry; in production you swap this tracer for OTel and send the data to Langfuse, Phoenix, Braintrust or Datadog LLM Observability.
 
-### 3. Evals determinísticos: `evals/checks.ts`
+### 3. Deterministic evals: `evals/checks.ts`
 
-Código puro, sem LLM: barato, rápido e reproduzível.
+Plain code, no LLM: cheap, fast and reproducible.
 
-| Check | Pergunta |
+| Check | Question |
 |---|---|
-| `tools` | Chamou exatamente as tools esperadas? |
-| `contains` | A resposta contém o valor esperado? (com normalização de `7.006.652` → `7006652`) |
-| `steps` | Resolveu em até N passos? |
-| `completed` | Terminou com `end_turn` (sem recusa, sem estourar tokens)? |
+| `tools` | Did it call exactly the expected tools? |
+| `contains` | Does the answer contain the expected value? (normalizing `7,006,652` → `7006652`) |
+| `steps` | Did it finish within N steps? |
+| `completed` | Did it end with `end_turn` (no refusal, no running out of tokens)? |
 
 ### 4. LLM-as-a-judge: `evals/judge.ts`
 
-Para o que código não consegue checar, outro modelo avalia, com dois critérios:
+For what code cannot check, another model evaluates the answer against two criteria:
 
-- **correct**: atende à rubrica do caso (`rubric` no dataset)?
-- **grounded**: todo número da resposta veio das tools? (detecta alucinação)
+- **correct**: does it meet the case's rubric (`rubric` in the dataset)?
+- **grounded**: did every number in the answer come from the tools? (detects hallucinations)
 
-Boas práticas aplicadas: veredito binário, um critério por chamada, raciocínio antes do veredito, saída estruturada com Zod, e o judge vê as chamadas de tools.
+Best practices applied: binary verdict, one criterion per call, a short justification (without asking for step-by-step reasoning, which the API refuses as `reasoning_extraction`), structured output with Zod, and the judge sees the tool calls.
 
-### 5. Rodar o eval: `evals/run.ts`
+### 5. Run the eval: `evals/run.ts`
 
 ```bash
 npm run eval
-npm run eval -- --only clima-sp,cidade-desconhecida
+npm run eval -- --only weather-sp,unknown-city
 ```
 
-Roda o agente em `evals/dataset.jsonl`, aplica os checks e o judge, imprime a tabela por caso e as métricas agregadas (pass rate por check, passos, latência p50/p95, custo do agente e do judge). O resultado é salvo em `results/`.
+Runs the agent over `evals/dataset.jsonl`, applies the checks and the judge, and prints the per-case table plus aggregated metrics (pass rate per check, steps, p50/p95 latency, agent and judge cost). The result is saved to `results/`.
 
-### 6. Experimentos: `evals/compare.ts`
+### 6. Experiments: `evals/compare.ts`
 
 ```bash
 PROMPT_VERSION=v1 npm run eval
@@ -84,43 +84,43 @@ PROMPT_VERSION=v2 npm run eval
 npm run eval:compare
 ```
 
-Compara as duas execuções mais recentes: métricas lado a lado e **quais casos mudaram de PASS para FAIL** (regressões). Teste também `AGENT_EFFORT=medium` ou `AGENT_MODEL=claude-haiku-5-5` e veja o trade-off entre custo e qualidade.
+Compares the two most recent runs: metrics side by side and **which cases flipped from PASS to FAIL** (regressions). Also try `AGENT_EFFORT=medium` or `AGENT_MODEL=claude-haiku-5-5` and look at the cost vs. quality trade-off.
 
-### 7. Calibrar o judge: `evals/calibrate.ts`
+### 7. Calibrate the judge: `evals/calibrate.ts`
 
 ```bash
 npm run judge:calibrate
 ```
 
-Um judge só vale como métrica se concordar com um humano. `evals/calibration.jsonl` tem respostas boas e ruins já rotuladas à mão; o script mede a concordância e o Cohen's kappa. Adicione seus próprios exemplos, principalmente os casos em que você discordou do judge.
+A judge is only useful as a metric if it agrees with a human. `evals/calibration.jsonl` has good and bad answers already labeled by hand; the script measures agreement and Cohen's kappa. Add your own examples, especially the cases where you disagreed with the judge.
 
-## Exercícios sugeridos
+## Suggested exercises
 
-1. Adicione uma tool nova (ex.: `get_date`) e casos no dataset que a usem.
-2. Crie um caso em que o v1 falhe e ajuste o prompt v2 até passar, sem regredir os outros.
-3. Pegue um caso que o judge errou, adicione-o em `calibration.jsonl` e melhore o critério.
-4. Troque o tracer por OpenTelemetry e envie para o Langfuse ou o Phoenix.
+1. Add a new tool (e.g. `get_date`) and dataset cases that use it.
+2. Write a case where v1 fails and tune the v2 prompt until it passes, without regressing the others.
+3. Take a case the judge got wrong, add it to `calibration.jsonl` and improve the criterion.
+4. Replace the tracer with OpenTelemetry and send the data to Langfuse or Phoenix.
 
-## Estrutura
+## Structure
 
 ```
 src/
-  config.ts         modelos, effort, versão do prompt, preços
-  llm.ts            chamada ao Claude + span com tokens/custo
-  tracing.ts        tracer mínimo (traces/spans)
-  tools.ts          as 3 tools e o executor
-  prompts.ts        system prompts versionados (v1, v2)
-  agent.ts          o loop do agente
+  config.ts         models, effort, prompt version, pricing
+  llm.ts            Claude call + span with tokens/cost
+  tracing.ts        minimal tracer (traces/spans)
+  tools.ts          the 3 tools and the executor
+  prompts.ts        versioned system prompts (v1, v2)
+  agent.ts          the agent loop
   cli.ts            npm run agent
   show-trace.ts     npm run trace
 evals/
-  dataset.jsonl     casos de teste
-  checks.ts         avaliações determinísticas
+  dataset.jsonl     test cases
+  checks.ts         deterministic evaluations
   judge.ts          LLM-as-a-judge
   run.ts            npm run eval
   compare.ts        npm run eval:compare
-  calibration.jsonl exemplos rotulados por humano
+  calibration.jsonl human-labeled examples
   calibrate.ts      npm run judge:calibrate
 ```
 
-Notas: as chamadas usam `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), então, se o modelo recusar a requisição, a API refaz a chamada em outro modelo automaticamente. O custo é calculado a partir de `usage` e da tabela em `src/config.ts`.
+Notes: calls use `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), so if the model refuses a request, the API automatically retries it on another model. Cost is computed from `usage` and the table in `src/config.ts`.

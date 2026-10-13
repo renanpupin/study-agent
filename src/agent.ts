@@ -1,11 +1,11 @@
-// O agente: um loop manual de tool use.
+// The agent: a manual tool-use loop.
 //
-//   1. manda a conversa + tools para o modelo
-//   2. se ele pedir tools (stop_reason "tool_use"), executa e devolve os resultados
-//   3. repete até ele responder sem pedir tools (ou atingir MAX_STEPS)
+//   1. send the conversation + tools to the model
+//   2. if it asks for tools (stop_reason "tool_use"), run them and send the results back
+//   3. repeat until it answers without asking for tools (or MAX_STEPS is reached)
 //
-// Escrevemos o loop à mão para ver cada peça. Em produção, o Tool Runner do
-// SDK (client.beta.messages.toolRunner) faz este loop por você.
+// We write the loop by hand to see every piece. In production, the SDK's Tool
+// Runner (client.beta.messages.toolRunner) runs this loop for you.
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { AGENT_EFFORT, AGENT_MODEL, MAX_STEPS, PROMPT_VERSION } from "./config";
@@ -65,8 +65,8 @@ export async function runAgent(question: string): Promise<AgentResult> {
         outputTokens += response.usage.output_tokens;
         cost += messageCost(response);
 
-        // Sempre devolvemos o content inteiro (incluindo blocos de thinking),
-        // não só o texto: o modelo precisa ver o próprio histórico intacto.
+        // Always send back the whole content (thinking blocks included), not
+        // just the text: the model needs to see its own history intact.
         messages.push({ role: "assistant", content: response.content });
 
         const toolUses = response.content.filter(
@@ -74,7 +74,7 @@ export async function runAgent(question: string): Promise<AgentResult> {
         );
 
         if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-          // Fim do loop: end_turn (normal), refusal, max_tokens...
+          // End of the loop: end_turn (normal), refusal, max_tokens...
           stopReason = response.stop_reason ?? "unknown";
           answer = response.content
             .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
@@ -84,8 +84,8 @@ export async function runAgent(question: string): Promise<AgentResult> {
           break;
         }
 
-        // O modelo pode pedir várias tools de uma vez: executamos todas e
-        // devolvemos TODOS os resultados numa única mensagem "user".
+        // The model may ask for several tools at once: we run all of them and
+        // send ALL the results back in a single "user" message.
         const results = await Promise.all(toolUses.map(runToolTraced));
         toolCalls.push(...results.map((r) => r.call));
         messages.push({ role: "user", content: results.map((r) => r.block) });
@@ -127,8 +127,8 @@ async function runToolTraced(toolUse: Anthropic.Beta.BetaToolUseBlock) {
       try {
         output = executeTool(toolUse.name, toolUse.input);
       } catch (err) {
-        // Erro de tool NÃO derruba o agente: vira um tool_result com is_error,
-        // e o modelo decide o que fazer (tentar de novo, avisar o usuário...).
+        // A tool error does NOT bring the agent down: it becomes a tool_result
+        // with is_error, and the model decides what to do (retry, tell the user...).
         output = err instanceof Error ? err.message : String(err);
         isError = true;
       }

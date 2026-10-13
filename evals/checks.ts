@@ -1,6 +1,6 @@
-// Avaliações DETERMINÍSTICAS: código puro, sem LLM.
-// São baratas, rápidas e 100% reproduzíveis. Use sempre que der; deixe o
-// LLM-as-a-judge só para o que código não consegue verificar.
+// DETERMINISTIC evaluations: plain code, no LLM.
+// They are cheap, fast and 100% reproducible. Use them whenever you can; keep
+// LLM-as-a-judge only for what code cannot check.
 
 import type { AgentResult } from "../src/agent";
 
@@ -8,7 +8,7 @@ export interface EvalCase {
   id: string;
   input: string;
   expected_tools: string[];
-  /** Cada item precisa aparecer na resposta. "a|b" = basta um dos dois. */
+  /** Each item must appear in the answer. "a|b" = either one is enough. */
   must_contain: string[];
   rubric: string;
   max_steps?: number;
@@ -29,18 +29,18 @@ export function runChecks(testCase: EvalCase, result: AgentResult): CheckResult[
   ];
 }
 
-/** O agente chamou exatamente o conjunto de tools esperado? (ordem e repetições não importam) */
+/** Did the agent call exactly the expected set of tools? (order and repetitions don't matter) */
 function checkToolSelection(testCase: EvalCase, result: AgentResult): CheckResult {
   const called = [...new Set(result.toolCalls.map((c) => c.name))].sort();
   const expected = [...new Set(testCase.expected_tools)].sort();
   return {
     name: "tools",
     pass: JSON.stringify(called) === JSON.stringify(expected),
-    detail: `esperado [${expected.join(", ")}], chamou [${called.join(", ")}]`,
+    detail: `expected [${expected.join(", ")}], called [${called.join(", ")}]`,
   };
 }
 
-/** A resposta contém os valores esperados? */
+/** Does the answer contain the expected values? */
 function checkAnswerContains(testCase: EvalCase, result: AgentResult): CheckResult {
   const answer = normalizeNumbers(result.answer).toLowerCase();
   const missing = testCase.must_contain.filter(
@@ -49,23 +49,23 @@ function checkAnswerContains(testCase: EvalCase, result: AgentResult): CheckResu
   return {
     name: "contains",
     pass: missing.length === 0,
-    detail: missing.length ? `faltou: ${missing.join(", ")}` : "ok",
+    detail: missing.length ? `missing: ${missing.join(", ")}` : "ok",
   };
 }
 
-/** Não ficou dando voltas? Mais passos = mais custo e latência. */
+/** Did it avoid going in circles? More steps = more cost and latency. */
 function checkSteps(testCase: EvalCase, result: AgentResult): CheckResult {
   const max = testCase.max_steps ?? 4;
   return { name: "steps", pass: result.steps <= max, detail: `${result.steps}/${max}` };
 }
 
-/** Terminou normalmente (sem recusa, sem estourar tokens ou passos)? */
+/** Did it finish normally (no refusal, no running out of tokens or steps)? */
 function checkCompleted(result: AgentResult): CheckResult {
   return { name: "completed", pass: result.stopReason === "end_turn", detail: result.stopReason };
 }
 
-// "R$ 7.006.652" e "7 006 652" viram "7006652", para comparar com o esperado.
-// Checks determinísticos quase sempre precisam de alguma normalização assim.
+// "$7,006,652" and "7 006 652" become "7006652", to compare with the expected value.
+// Deterministic checks almost always need some normalization like this.
 function normalizeNumbers(text: string): string {
   return text.replace(/(\d)[.,\s](?=\d{3}\b)/g, "$1");
 }

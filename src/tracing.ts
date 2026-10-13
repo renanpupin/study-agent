@@ -1,9 +1,9 @@
-// Um tracer mínimo, escrito à mão, para entender o conceito.
+// A minimal, hand-written tracer, to understand the concept.
 //
-// Trace = uma execução completa (ex.: uma pergunta ao agente).
-// Span  = uma etapa dentro dela (chamada ao LLM, execução de tool, judge...).
-// Spans formam uma árvore via parentId. É exatamente o modelo do OpenTelemetry,
-// que é o que Langfuse, Phoenix, Datadog etc. consomem em produção.
+// Trace = one complete run (e.g. one question to the agent).
+// Span  = one step inside it (LLM call, tool execution, judge...).
+// Spans form a tree through parentId. This is exactly the OpenTelemetry model,
+// which is what Langfuse, Phoenix, Datadog etc. consume in production.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -25,8 +25,8 @@ export interface Span {
 
 export const TRACES_DIR = "traces";
 
-// AsyncLocalStorage guarda o "span atual" através de awaits, então um span
-// criado dentro de outro vira filho dele automaticamente (como no OTel).
+// AsyncLocalStorage keeps the "current span" across awaits, so a span created
+// inside another one automatically becomes its child (like in OTel).
 const currentSpan = new AsyncLocalStorage<Span>();
 const spansByTrace = new Map<string, Span[]>();
 
@@ -60,7 +60,7 @@ export async function withSpan<T>(
     throw err;
   } finally {
     span.durationMs = Date.now() - span.startTime;
-    // Span raiz terminou: o trace está completo, então salvamos em disco.
+    // The root span finished: the trace is complete, so we save it to disk.
     if (span.parentId === null) flushTrace(span.traceId);
   }
 }

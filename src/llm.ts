@@ -1,17 +1,17 @@
-// Ponto único de chamada ao Claude. Toda chamada vira um span "llm" no trace,
-// com modelo, tokens, custo e stop_reason. Centralizar aqui é o que garante
-// que nenhuma chamada fica "invisível" para a observabilidade.
+// Single entry point for calling Claude. Every call becomes an "llm" span in
+// the trace, with model, tokens, cost and stop_reason. Centralizing it here is
+// what guarantees that no call is "invisible" to observability.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { costUsd } from "./config";
 import { setAttributes, withSpan } from "./tracing";
 
-// Lê ANTHROPIC_API_KEY do ambiente (ou do .env, via scripts do package.json).
+// Reads ANTHROPIC_API_KEY from the environment (or from .env, via the package.json scripts).
 export const client = new Anthropic();
 
-// Se o modelo principal recusar a requisição (stop_reason "refusal"), a API
-// refaz a chamada automaticamente em outro modelo. "default" escolhe o
-// fallback pela categoria da recusa, sem manter lista de modelos.
+// If the main model refuses the request (stop_reason "refusal"), the API
+// automatically retries the call on another model. "default" picks the
+// fallback based on the refusal category, so there is no model list to maintain.
 const FALLBACK: { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" } = {
   betas: ["server-side-fallback-2026-07-01"],
   fallbacks: "default",
@@ -31,7 +31,7 @@ export function parseMessage<P extends CreateParams>(params: P, spanName = "llm.
 }
 
 export function messageCost(message: Anthropic.Beta.BetaMessage): number {
-  // message.model é o modelo que de fato respondeu (pode ser o fallback).
+  // message.model is the model that actually answered (it may be the fallback).
   return costUsd(message.model, message.usage.input_tokens, message.usage.output_tokens);
 }
 
@@ -44,6 +44,8 @@ async function traced<M extends Anthropic.Beta.BetaMessage>(
     setAttributes(span, {
       model: message.model,
       stop_reason: message.stop_reason,
+      // Only set on refusals: the category and an explanation of the reason.
+      ...(message.stop_details && { stop_details: message.stop_details }),
       input_tokens: message.usage.input_tokens,
       output_tokens: message.usage.output_tokens,
       cost_usd: messageCost(message),
